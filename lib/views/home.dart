@@ -7,6 +7,7 @@ import '../services/driver_booking_service.dart';
 import 'package:Yurban/views/driver_detail.dart';
 import 'package:Yurban/views/driver_rides_screen.dart';
 import 'package:Yurban/views/driver_tracking_screen.dart';
+import '../controllers/location_controller.dart'; // Add this import
 
 class DriverLandingScreen extends StatefulWidget {
   final String token;
@@ -19,10 +20,12 @@ class DriverLandingScreen extends StatefulWidget {
 
 class _DriverLandingScreenState extends State<DriverLandingScreen> {
   final DriverBookingService _bookingService = Get.find<DriverBookingService>();
+  final LocationController _locationController =
+      Get.put(LocationController()); // Initialize LocationController
   bool isOnline = false;
   List<Map<String, dynamic>> availableRides = [];
   final Completer<GoogleMapController> _mapController = Completer();
-  static const LatLng _sampleLocation = LatLng(-1.292066, 36.821946); // Nairobi
+  LatLng? _currentLocation; // Changed to nullable
   bool isLoading = false;
   Timer? _rideFetchTimer;
 
@@ -32,13 +35,36 @@ class _DriverLandingScreenState extends State<DriverLandingScreen> {
     _bookingService.setAuthToken(widget.token);
     print('DriverLandingScreen token: ${widget.token}');
     _fetchInitialStatus();
+    _listenToLocationUpdates(); // Start listening to location updates
+  }
+
+  void _listenToLocationUpdates() {
+    _locationController.currentPosition.listen((position) {
+      if (position != null && mounted) {
+        setState(() {
+          _currentLocation = LatLng(position.latitude, position.longitude);
+        });
+        _updateMapCamera();
+      }
+    });
+  }
+
+  Future<void> _updateMapCamera() async {
+    if (_currentLocation != null) {
+      final controller = await _mapController.future;
+      controller.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(target: _currentLocation!, zoom: 13),
+        ),
+      );
+    }
   }
 
   Future<void> _fetchInitialStatus() async {
     setState(() => isLoading = true);
     try {
       print('Fetching initial status with token: ${widget.token}');
-      isOnline = false; // Default, will replace with API fetch when available
+      isOnline = false;
     } catch (e) {
       _showSnackBar('Error fetching status: $e');
     } finally {
@@ -121,7 +147,6 @@ class _DriverLandingScreenState extends State<DriverLandingScreen> {
         title: Text(
           'Yurban Driver',
           style: GoogleFonts.orbitron(
-            // Futuristic font
             fontSize: 24,
             fontWeight: FontWeight.bold,
             color: Colors.white,
@@ -187,17 +212,23 @@ class _DriverLandingScreenState extends State<DriverLandingScreen> {
   Widget _buildMapSection() => Container(
         height: 350,
         child: GoogleMap(
-          initialCameraPosition:
-              const CameraPosition(target: _sampleLocation, zoom: 13),
+          initialCameraPosition: CameraPosition(
+            target: _currentLocation ??
+                const LatLng(-1.292066,
+                    36.821946), // Fallback to Nairobi if no location yet
+            zoom: 13,
+          ),
           onMapCreated: (controller) => _mapController.complete(controller),
-          markers: {
-            Marker(
-              markerId: const MarkerId('current'),
-              position: _sampleLocation,
-              icon: BitmapDescriptor.defaultMarkerWithHue(
-                  BitmapDescriptor.hueRed),
-            ),
-          },
+          markers: _currentLocation != null
+              ? {
+                  Marker(
+                    markerId: const MarkerId('current'),
+                    position: _currentLocation!,
+                    icon: BitmapDescriptor.defaultMarkerWithHue(
+                        BitmapDescriptor.hueRed),
+                  ),
+                }
+              : {},
           mapType: MapType.normal,
           liteModeEnabled: false,
         ),
@@ -254,7 +285,7 @@ class _DriverLandingScreenState extends State<DriverLandingScreen> {
   Widget _buildRideCard(
           Map<String, dynamic> ride, LatLng pickup, LatLng dropoff) =>
       Card(
-        elevation: 0, // Flat design
+        elevation: 0,
         color: Colors.black.withOpacity(0.8),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8),

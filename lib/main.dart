@@ -1,3 +1,4 @@
+import 'package:Yurban/controllers/location_controller.dart';
 import 'package:Yurban/services/driver_booking_service.dart';
 import 'package:Yurban/views/home.dart';
 import 'package:Yurban/views/welcome.dart';
@@ -8,6 +9,7 @@ import 'package:get_storage/get_storage.dart';
 void main() async {
   await GetStorage.init();
   Get.put(DriverBookingService());
+  Get.put(LocationController());
   runApp(const MyApp());
 }
 
